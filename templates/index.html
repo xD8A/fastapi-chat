@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+    <div id="auth">
+        Name: <input id="username" type="text" />
+        Password: <input id="password" type="password" />
+        <button onclick="signIn()">Sign in</button>
+    </div>
+    <div id="chats">
+        <select id="contacts" onchange="selectContact()">
+        </select>
+        <div id="chat"></div>
+        <input id="message" type="text" /><button onclick="sendMessage(1)">Send</button>
+    </div>
+    <script type="text/javascript">
+        var chatSocket;
+
+        function recreateChatSocket(contactId) {
+            let oldSocket = chatSocket;
+            const token = localStorage.token;
+
+            const url = `ws://${window.location.hostname}:${window.location.port}/chat/${contactId}?token=${token}`;
+            chatSocket = new WebSocket(url);
+
+            chatSocket.onmessage = function (event) {
+                console.log("onmessage");
+                let container = document.getElementById("chat");
+                let paragraph = document.createElement("p");
+                let msg = JSON.parse(event.data);
+                let text = document.createTextNode(`[${msg.created_at}] ${msg.author.name}: ${msg.text}`);
+                paragraph.appendChild(text);
+                container.appendChild(paragraph);
+            }
+
+            if (oldSocket !== undefined) {
+                oldSocket.close();
+            }
+        }
+
+        function sendMessage(interval) {
+            if (chatSocket.readyState === 1) {
+                const msg = document.getElementById("message").value;
+                chatSocket.send(msg);
+            } else {
+                setTimeout(function () {
+                    sendMessage(interval);
+                }, interval);
+            }
+        }
+
+        function selectContact()
+        {
+            console.log("selectContact");
+
+            let select = document.getElementById("contacts");
+            const contactId = select.options[select.selectedIndex].value;
+
+            const container = document.getElementById("chat");
+            container.textContent = "";
+
+            recreateChatSocket(contactId);
+
+            let limit = 10;
+            let xhr = new XMLHttpRequest();
+            const token = localStorage.token;
+            xhr.open("GET", `/contacts/${contactId}/messages?limit=${limit}`, true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    const messages = JSON.parse(xhr.responseText);
+                    messages.forEach(msg => {
+                        let paragraph = document.createElement("p");
+                        let text = document.createTextNode(`[${msg.created_at}] ${msg.author.name}: ${msg.text}`);
+                        paragraph.appendChild(text);
+                        container.prepend(paragraph);
+                    });
+                }
+            };
+            xhr.send();
+
+        }
+
+        function getContacts() {
+            console.log("getContacts");
+
+            let xhr = new XMLHttpRequest();
+            const token = localStorage.token;
+            xhr.open("GET", "/contacts", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+
+                    let select = document.getElementById("contacts");
+                    let i, n = select.options.length;
+                    for (i = n-1; i >= 0; i--) {
+                        select.options[i] = null;
+                    }
+
+                    const contacts = JSON.parse(xhr.responseText);
+                    n = contacts.length;
+                    for (i = 0; i < n; i++) {
+                        let contact = contacts[i];
+                        let opt = document.createElement("option");
+                        opt.value = contact.id;
+                        opt.innerHTML = contact.name;
+                        select.appendChild(opt);
+                    }
+
+                    if (n > 0) {
+                        selectContact();
+                    }
+
+                }
+            };
+            xhr.send();
+        }
+
+        function signIn() {
+            console.log("signIn");
+
+            let xhr = new XMLHttpRequest();
+            xhr.open("POST", "/sign-in", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    const json = JSON.parse(xhr.responseText);
+                    localStorage.token = json.token;
+                    getContacts();
+                }
+            };
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+            const data = JSON.stringify({"name": username, "password": password});
+            xhr.send(data);
+        }
+    </script>
+</body>
+</html>

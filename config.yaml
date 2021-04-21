@@ -1,0 +1,6 @@
+db:
+  # url: "postgresql://user:password@postgresserver/db"
+  url: "sqlite:///./app.db"
+jwt:
+  secret: "secret"
+  duration: 86400
